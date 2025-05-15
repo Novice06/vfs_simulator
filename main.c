@@ -1,19 +1,24 @@
 #include <stdio.h>
-#include "disk.h"
 
+#include "device.h"
+#include "ramfs.h"
+#include "vfs.h"
 
 int main()
 {
-    uint8_t sector[512];
-    disk_init();
+    vfs_init();
+    ramfs_init();
 
-    for(int i = 0; i < disk_num; i++)
-        printf("disk name: %s\n", disks[i]->name);
+    uint8_t buffer[15];
 
-    readSector(disks[0], 1, sector);
-    for (int i = 0; i < 512; i++)
-        printf("0x%x ", sector[i]);
+    if(vfs_mount("ramfs", "/", 0) == VFS_ERROR)
+        printf("error !\n");
     
-    printf("\n");
+    int fd = vfs_open("/doc/hello.txt", VFS_O_RDWR);
+    printf("byte read: %ld\n", vfs_read(fd, buffer, 13));
+    buffer[13] = '\0';
+
+    printf("content: %s\n", buffer);
+
     return 0;
 }
