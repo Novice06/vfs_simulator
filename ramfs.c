@@ -1,3 +1,27 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2025 Novice
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+*/
+
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
@@ -6,29 +30,7 @@
 #include "device.h"
 #include "vfs.h"
 
-typedef enum {
-    NODE_FILE,
-    NODE_DIRECTORY
-} nodetype_t;
-
-// Structure de métadonnées pour les fichiers/dossiers
-typedef struct metadata {
-    char name[MAX_NAME_LENGTH];
-    nodetype_t type;
-    uint64_t size;
-    uint64_t create_time;
-    uint64_t modify_time;
-    uint64_t access_time;
-} metadata_t;
-
-// Structure d'un nœud dans l'arbre N-aire
-typedef struct treenode {
-    metadata_t meta;
-    struct treenode *parent;
-    struct treenode *first_child;
-    struct treenode *next_sibling;
-    uint8_t *data; // Contenu pour les fichiers
-} treenode_t;
+#include "ramfs.h"
 
 uint64_t get_current_time() {
     return (uint64_t)time(NULL);
@@ -171,7 +173,7 @@ int ramfs_get_root(vfs_t* mountpoint, vnode_t** result);
 
 int read(vnode_t* node, void *buffer, size_t size, uint32_t offset);
 int write(vnode_t* node, const void *buffer, size_t size, uint32_t offset);
-int lookup(vnode_t* node, const char* path, struct vnode** result);
+int lookup(vnode_t* node, const char* name, struct vnode** result);
 
 filesystem_t ramfs_op = {
     .get_root = ramfs_get_root,
@@ -202,6 +204,12 @@ void ramfs_init()
     ramfs_write(hello, (const uint8_t*)"hello world !", 13, 0);
     ramfs_create_node(root0_fs, "mnt", NODE_DIRECTORY);
 
+    device_t* device_1 = malloc(sizeof(device_t));
+    strcpy(device_1->name, "root0_fs");
+    device_1->priv = root0_fs;
+    device_1->read = NULL;
+    device_1->write = NULL;
+    add_device(device_1);
 
     treenode_t* root1_fs = malloc(sizeof(treenode_t));
     root1_fs->meta.type = NODE_DIRECTORY;
@@ -212,16 +220,9 @@ void ramfs_init()
     treenode_t* hi = ramfs_create_node(root1_fs, "hi.txt", NODE_FILE);
     ramfs_write(hi, (const uint8_t*)"hi from root1_fs !", 18, 0);
 
-    device_t* device_1 = malloc(sizeof(device_t));
-    strcpy(device_1->name, "root0_fs");
-    device_1->priv = root0_fs;
-    device_1->read = NULL;
-    device_1->write = NULL;
-    add_device(device_1);
-
     device_t* device_2 = malloc(sizeof(device_t));
-    strcpy(device_2->name, "root0_fs");
-    device_2->priv = root0_fs;
+    strcpy(device_2->name, "root1_fs");
+    device_2->priv = root1_fs;
     device_2->read = NULL;
     device_2->write = NULL;
     add_device(device_2);
@@ -277,18 +278,17 @@ static vnode_t* create_vnode(vfs_t* mountpoint, treenode_t* node)
 {
     fs_info_t* fs_info = (fs_info_t*)mountpoint->vfs_data;
 
+    for(int i = 0; i < MAX_VNODE; i++)
+        if(fs_info->total_vnode[i] != NULL && fs_info->total_vnode[i]->vnode_data == (void*)node)
+            return fs_info->total_vnode[i];    // if the vnode already exist in the vnode table
+
     vnode_t* newVnode = malloc(sizeof(vnode_t));
     newVnode->ref_count = 0;
     newVnode->vfs_mountedhere = NULL;
     newVnode->vnode_data = node;
     newVnode->vnode_op = &ramfs_vnode_op;
     newVnode->vnode_vfs = mountpoint;
-
-    for(int i = 0; i < MAX_VNODE; i++)
-        if(fs_info->total_vnode[i] != NULL && fs_info->total_vnode[i]->vnode_op == (void*)node)
-            return newVnode;    // if the vnode already exist in the vnode table
-
-    
+   
     // otherwise we'll search a free place
     for(int i = 0; i < MAX_VNODE; i++)
     {   
@@ -310,35 +310,14 @@ static vnode_t* create_vnode(vfs_t* mountpoint, treenode_t* node)
     return NULL;
 }
 
-int lookup(vnode_t* node_dir, const char* path, struct vnode** result)
+int lookup(vnode_t* node_dir, const char* name, struct vnode** result)
 {
+    treenode_t* node = NULL;
     treenode_t* parent = (treenode_t*)node_dir->vnode_data;
-    char parsedPath[VFS_MAX_PATH_LENGTH];
-    char* entryName;
-    bool parsed_whole_path = true;
 
-    treenode_t* node = parent;
-    strncpy(parsedPath, path, VFS_MAX_PATH_LENGTH);
-    entryName = strtok(parsedPath, "/");
-
-    while(entryName != NULL)
-    {
-        if(node != NULL && node->meta.type != NODE_DIRECTORY)
-        {
-            parsed_whole_path = false;
-            break;
-        }
-
-        node = ramfs_lookup(node, entryName);
-
-        entryName = strtok(NULL, "/");
-    }
-
-    if (!parsed_whole_path)
-    {
-        *result = NULL;
-        return VFS_ENOTDIR;
-    }
+    node = ramfs_lookup(parent, name);
+    if(node == NULL)
+        return VFS_ENOENT;
 
     *result = create_vnode(node_dir->vnode_vfs, node);
 

@@ -3,6 +3,8 @@
         "stddef.h": "c",
         "stdbool.h": "c",
         "dirent.h": "c",
-        "typeinfo": "c"
+        "typeinfo": "c",
+        "stdlib.h": "c",
+        "libc-header-start.h": "c"
     }
 }

@@ -1,3 +1,27 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2025 Novice
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,25 +36,8 @@ filesystem_t *registered_fs[VFS_MAX_FS];
 int num_registered_fs;
 vfs_file_t vfs_open_files[MAX_OPEN_FILES];
 
-static int count_slash_path(const char* path)
-{
-	char* slash;
-	int num = 0;
-
-	slash = strchr(path, '/');
-	while(slash != NULL)
-	{
-		num++;
-		slash = strchr(slash+1, '/');
-	}
-
-	return num;
-}
-
 static void add_mount_point(vfs_t *mountpoint)
 {
-	int mountpoint_length = count_slash_path(mountpoint->mount_point);
-
 	if(vfs_root == NULL)
 	{
 		vfs_root = mountpoint;
@@ -38,21 +45,9 @@ static void add_mount_point(vfs_t *mountpoint)
 	}
 
 	vfs_t *current = vfs_root;
-
 	while (current->next != NULL)
-	{
-		int next_length = count_slash_path(current->next->mount_point);
-
-		if(next_length > mountpoint_length)
-		{
-			mountpoint->next = current->next;
-			current->next = mountpoint;
-			return;
-		}
-
 		current = current->next;
-	}
-	
+
 	current->next = mountpoint;
 }
 
@@ -64,44 +59,6 @@ static void remove_mount_point(vfs_t *mountpoint)
 		current = current->next;
 
 	current->next = mountpoint;
-}
-
-static vfs_t* find_mount_point_by_path(const char *path)
-{
-	vfs_t *current = vfs_root;
-
-    while (current != NULL)
-	{
-		if(strcmp(current->mount_point, path) == 0)
-			return current;
-		
-		current = current->next;
-	}
-
-	return NULL;
- }
- 
-
-static vfs_t* find_best_mount_point(const char *path, char* relativePathOut)
-{
-	if(path == NULL)
-		return NULL;
-
-	vfs_t* best_mountpoint = vfs_root;
-	vfs_t* current = best_mountpoint->next;
-
-	while (current != NULL)
-	{
-		if(strncmp(current->mount_point, path, strlen(current->mount_point)) == 0)
-			best_mountpoint = current;
-
-		current = current->next;
-	}
-
-	if(relativePathOut != NULL)
-		strcpy(relativePathOut, &path[strlen(best_mountpoint->mount_point)]);
-	
-	return best_mountpoint;
 }
 
  static filesystem_t *find_filesystem_by_name(const char *name)
@@ -151,7 +108,7 @@ void vfs_init()
 
 vnode_t* lookup_path_name(const char* path)
 {
-	vnode_t* root_node = NULL;
+	/*vnode_t* root_node = NULL;
 	vnode_t* node_out = NULL;
 	char newPath[VFS_MAX_PATH_LENGTH];
 
@@ -165,6 +122,32 @@ vnode_t* lookup_path_name(const char* path)
 	root_node->vnode_op->lookup(root_node, newPath, &node_out);
 	// TODO: CHECK FOR ERROR !!
 
+	return node_out;*/
+
+	vnode_t* node_out = NULL;
+	char parsed_path[VFS_MAX_PATH_LENGTH];
+	char* name;
+
+	if(path == NULL || path[0] != '/')
+		return NULL;
+
+	strcpy(parsed_path, path);
+
+	vfs_root->vfs_op->get_root(vfs_root, &node_out);
+	name = strtok(parsed_path, "/");
+	
+	while(node_out != NULL && name != NULL)
+	{
+		if(node_out->vfs_mountedhere != NULL) // if this is a mountpoint
+			node_out->vfs_mountedhere->vfs_op->get_root(node_out->vfs_mountedhere, &node_out);
+
+		node_out->vnode_op->lookup(node_out, name, &node_out);
+		name = strtok(NULL, "/");
+	}
+
+	//if(name != NULL)	// this means the path has not been enterely parsed, this code has been commented out
+	//	return NULL;	// because it's useless the lookup vnode operation returns null as result
+	
 	return node_out;
 }
 
@@ -181,18 +164,21 @@ int vfs_mount(const char *fs_name, const char *mount_point, int device_id)
 	new_vfs = malloc(sizeof(vfs_t));
 
 	new_vfs->next = NULL;
-	strncpy(new_vfs->mount_point, mount_point, VFS_MAX_PATH_LENGTH);
 	new_vfs->vfs_op = fs;
 
 	if(vfs_root == NULL)	// is this the first mount point ?
-	{
 		new_vfs->vnodecovered = NULL;
-		strcpy(new_vfs->mount_point, "/");
-	}
 	else
 	{
 		new_vfs->vnodecovered = lookup_path_name(mount_point);
-		// TODO: CHECK FOR ERROR !!
+		if(new_vfs->vnodecovered == NULL)
+		{
+			free(new_vfs);
+			return VFS_ENOENT;
+		}
+
+		new_vfs->vnodecovered->ref_count++;
+		new_vfs->vnodecovered->vfs_mountedhere = new_vfs;
 	}
 
 	new_vfs->vfs_op->vfs_mount(new_vfs, device_id);
@@ -203,13 +189,22 @@ int vfs_mount(const char *fs_name, const char *mount_point, int device_id)
 
  int vfs_unmount(const char *mount_point)
  {
-	vfs_t* mountpoint = find_mount_point_by_path(mount_point);
+	//vfs_t* mountpoint = find_mount_point_by_path(mount_point);
+
+	vnode_t* vnode_covered = lookup_path_name(mount_point);
+	if(vnode_covered == NULL)
+		return VFS_ENOENT;
+
+	vfs_t* mountpoint = vnode_covered->vfs_mountedhere;
 
 	if(mountpoint == NULL)
 		return VFS_ERROR;	// it's not a mount point...
 
 	if (mountpoint == vfs_root)
          return VFS_EACCESS;  // cannot unmount the root fs
+
+	// TODO: implemente a mechanism to prevent umounting a filesystem
+	// as long as there are other filesystems mounted on top of it
 
 	mountpoint->vfs_op->vfs_unmount(mountpoint);
 	remove_mount_point(mountpoint);
@@ -220,17 +215,8 @@ int vfs_mount(const char *fs_name, const char *mount_point, int device_id)
 
  fd_t vfs_open(const char *path, uint16_t mode)
  {
-	vnode_t* root_node = NULL;
-	vnode_t* file_node = NULL;
-	char newPath[VFS_MAX_PATH_LENGTH];
+	vnode_t* file_node = lookup_path_name(path);
 
-	vfs_t* mountpoint = find_best_mount_point(path, newPath);
-	if(mountpoint == NULL)
-		return VFS_ERROR;
-
-	mountpoint->vfs_op->get_root(mountpoint, &root_node);
-
-	root_node->vnode_op->lookup(root_node, newPath, &file_node);
 	if(file_node == NULL)
 		return VFS_ENOENT;
 

@@ -22,43 +22,15 @@
  * SOFTWARE.
 */
 
+#pragma once
+
 #include <stdio.h>
+#include <stdint.h>
 
-#include "device.h"
-#include "ramfs.h"
-#include "disk.h"
-#include "vfs.h"
-
-int main()
+typedef struct disk_info
 {
-    vfs_init();
-    ramfs_init();
-    disk_init();
+    uint32_t totalSectors;
+    FILE* stream;
+}disk_info_t;
 
-    uint8_t buffer[19];
-
-    printf("device number %d\n\n", device_num);
-
-    if(vfs_mount("ramfs", "/", 0) != VFS_OK)
-        printf("error while mounting ramfs1 at /!\n");
-
-    if(vfs_mount("ramfs", "/mnt", 1) != VFS_OK)
-        printf("error while mounting ramfs2 at /mnt!\n");
-
-    int fd1 = vfs_open("/mnt/hi.txt", VFS_O_RDWR);
-    printf("opening /mnt/hi.txt\n");
-    printf("byte read: %ld\n", vfs_read(fd1, buffer, 18));
-    buffer[18] = '\0';
-
-    printf("content: %s\n", buffer);
-    
-    int fd2 = vfs_open("/doc/hello.txt", VFS_O_RDWR);
-    printf("\nopening /doc/hello.txt\n");
-    printf("byte written: %ld\n", vfs_write(fd2, buffer, 7));
-    printf("byte read: %ld\n", vfs_read(fd2, buffer, 7));
-    buffer[7] = '\0';
-
-    printf("content: %s\n", buffer);
-
-    return 0;
-}
+void disk_init();
