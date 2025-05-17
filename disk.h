@@ -27,6 +27,14 @@
 #include <stdio.h>
 #include <stdint.h>
 
+
+/*
+ * Disk Structure  
+ *
+ * This structure represents a disk in this case, a virtual disk. 
+ * It doesn’t have many members, but it gets the job done. 
+ * The stream member, in particular, acts as a kind of raw data buffer for the disk
+*/
 typedef struct disk_info
 {
     uint32_t totalSectors;

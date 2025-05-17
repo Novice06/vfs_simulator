@@ -88,6 +88,7 @@ static int is_fd_valid(fd_t fd)
 	if(fd < 0 || fd >= MAX_OPEN_FILES)
 		return 0;
 
+	// if the fd is currently in use ...
 	if (vfs_open_files[fd].vnode == NULL)
 		return 0;
 
@@ -96,7 +97,7 @@ static int is_fd_valid(fd_t fd)
 
 void vfs_init()
 {
-	vfs_root = NULL;
+	vfs_root = NULL;		// 0 mountpoint
 	num_registered_fs = 0;
 
 	for(int i = 0; i < VFS_MAX_FS; i++)
@@ -108,22 +109,6 @@ void vfs_init()
 
 vnode_t* lookup_path_name(const char* path)
 {
-	/*vnode_t* root_node = NULL;
-	vnode_t* node_out = NULL;
-	char newPath[VFS_MAX_PATH_LENGTH];
-
-	if(path == NULL)
-		return NULL;
-
-	vfs_t* mountpoint = find_best_mount_point(path, newPath);
-
-	mountpoint->vfs_op->get_root(mountpoint, &root_node);
-
-	root_node->vnode_op->lookup(root_node, newPath, &node_out);
-	// TODO: CHECK FOR ERROR !!
-
-	return node_out;*/
-
 	vnode_t* node_out = NULL;
 	char parsed_path[VFS_MAX_PATH_LENGTH];
 	char* name;
@@ -145,8 +130,14 @@ vnode_t* lookup_path_name(const char* path)
 		name = strtok(NULL, "/");
 	}
 
-	//if(name != NULL)	// this means the path has not been enterely parsed, this code has been commented out
-	//	return NULL;	// because it's useless the lookup vnode operation returns null as result
+	// If `name` is not NULL, it means the path has not been fully parsed yet.
+	// This check is commented out because it's unnecessary:
+	// the `lookup` vnode operation will already return NULL if the file is not found.
+	//if(name != NULL)
+	//	return NULL;
+
+	if(node_out != NULL && node_out->vfs_mountedhere != NULL) // if this is a mountpoint
+			node_out->vfs_mountedhere->vfs_op->get_root(node_out->vfs_mountedhere, &node_out);
 	
 	return node_out;
 }
@@ -170,11 +161,18 @@ int vfs_mount(const char *fs_name, const char *mount_point, int device_id)
 		new_vfs->vnodecovered = NULL;
 	else
 	{
+		// find the vnode's mountpoint
 		new_vfs->vnodecovered = lookup_path_name(mount_point);
 		if(new_vfs->vnodecovered == NULL)
 		{
 			free(new_vfs);
 			return VFS_ENOENT;
+		}
+
+		if(new_vfs->vnodecovered->vnode_type != VDIR)
+		{
+			free(new_vfs);
+			return VFS_ENOTDIR;
 		}
 
 		new_vfs->vnodecovered->ref_count++;
@@ -189,8 +187,6 @@ int vfs_mount(const char *fs_name, const char *mount_point, int device_id)
 
  int vfs_unmount(const char *mount_point)
  {
-	//vfs_t* mountpoint = find_mount_point_by_path(mount_point);
-
 	vnode_t* vnode_covered = lookup_path_name(mount_point);
 	if(vnode_covered == NULL)
 		return VFS_ENOENT;
@@ -219,6 +215,9 @@ int vfs_mount(const char *fs_name, const char *mount_point, int device_id)
 
 	if(file_node == NULL)
 		return VFS_ENOENT;
+
+	if(file_node->vnode_type != VREG)
+		return VFS_EISDIR;
 
 	fd_t descriptor = find_free_fd();
 	if(descriptor == VFS_ENFILE)

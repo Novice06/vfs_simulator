@@ -28,15 +28,33 @@
 
 #define MAX_NAME_LENGTH 64
 
+/*
+ * Structure to Simulate a Device in an OS-like Environment  
+ *
+ * At this point, I honestly don’t know exactly why we need to implement this kind of structure.
+ * All I know is that I’ve seen similar ones used in many codebases. In this case, 
+ * it helps simplify things when mounting a VFS that expects a device ID field.
+*/
 typedef struct device
 {
 	char name[MAX_NAME_LENGTH];
-	uint32_t id;
+	uint32_t id;	// unique id
+
+	// functions to interact with the device
 	void (*read)(uint8_t* buffer, uint32_t offset , uint32_t len, void* dev);
 	void (*write)(const uint8_t *buffer, uint32_t offset, uint32_t len, void* dev);
-	void *priv;
+
+	void *priv;	// private data of the device ...
 } device_t;
 
+
+/*
+ * Why These Variables Are Declared as extern:  
+ *
+ * I declared these variables as extern in this header because 
+ * I didn’t want to create getter functions. I’m not sure if that’s the best idea, 
+ * but it keeps things simple for now.
+*/
 extern device_t **device_list;
 extern int device_num;
 

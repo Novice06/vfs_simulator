@@ -24,12 +24,14 @@
 
 #pragma once
 
+/* Ramfs simulates an in-memory file system with an N-ary tree, perfect for initial testing */
+
 typedef enum {
     NODE_FILE,
     NODE_DIRECTORY
 } nodetype_t;
 
-// Structure de métadonnées pour les fichiers/dossiers
+// Metadata structure for files and directories
 typedef struct metadata {
     char name[MAX_NAME_LENGTH];
     nodetype_t type;
@@ -39,13 +41,13 @@ typedef struct metadata {
     uint64_t access_time;
 } metadata_t;
 
-// Structure d'un nœud dans l'arbre N-aire
+// Structure of a node in the N-ary tree
 typedef struct treenode {
     metadata_t meta;
     struct treenode *parent;
     struct treenode *first_child;
     struct treenode *next_sibling;
-    uint8_t *data; // Contenu pour les fichiers
+    uint8_t *data; // file content
 } treenode_t;
 
 void ramfs_init();

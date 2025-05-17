@@ -39,9 +39,11 @@ int main()
 
     printf("device number %d\n\n", device_num);
 
+    printf("mounting %s to /\n", device_list[0]->name);
     if(vfs_mount("ramfs", "/", 0) != VFS_OK)
         printf("error while mounting ramfs1 at /!\n");
 
+    printf("mounting %s to /mnt\n\n", device_list[1]->name);
     if(vfs_mount("ramfs", "/mnt", 1) != VFS_OK)
         printf("error while mounting ramfs2 at /mnt!\n");
 
@@ -60,5 +62,7 @@ int main()
 
     printf("content: %s\n", buffer);
 
+    vfs_close(fd1);
+    vfs_close(fd2);
     return 0;
 }
