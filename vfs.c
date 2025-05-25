@@ -120,7 +120,7 @@ vnode_t* lookup_path_name(const char* path)
 
 	vfs_root->vfs_op->get_root(vfs_root, &node_out);
 	name = strtok(parsed_path, "/");
-	
+ 
 	while(node_out != NULL && name != NULL)
 	{
 		if(node_out->vfs_mountedhere != NULL) // if this is a mountpoint
@@ -155,6 +155,7 @@ int vfs_mount(const char *fs_name, const char *mount_point, int device_id)
 	new_vfs = malloc(sizeof(vfs_t));
 
 	new_vfs->next = NULL;
+	new_vfs->device_id = device_id;
 	new_vfs->vfs_op = fs;
 
 	if(vfs_root == NULL)	// is this the first mount point ?

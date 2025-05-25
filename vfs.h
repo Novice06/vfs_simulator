@@ -61,6 +61,7 @@ struct vnodeops;
 typedef struct vfs
 {
     struct vfs *next;           /* Pointer to the next mounted file system (used in a linked list) */
+    int device_id;
     struct filesystem *vfs_op;  /* Pointer to the file system operations (driver) associated with this mount */
     struct vnode *vnodecovered; /* The vnode that this file system is mounted over (i.e., the mount point) */
     void *vfs_data;             /* Private data used by the specific file system implementation */
@@ -80,6 +81,19 @@ typedef struct filesystem
 }filesystem_t;
 
 
+typedef enum {
+    VNODE_NONE        = 0,    // No special flag
+    VNODE_ROOT        = 1 << 0, // This vnode is the root of a filesystem
+    
+    #if 0
+    VNODE_EXECUTABLE  = 1 << 1, // The file is executable
+    VNODE_MAPPED      = 1 << 2, // The file is memory-mapped
+    VNODE_MODIFIED    = 1 << 3, // File has been modified
+    VNODE_DELETED     = 1 << 4, // File has been deleted but still in use
+    VNODE_DIRECTORY   = 1 << 5  // This vnode is a directory
+    #endif  // I haven't found a use for these yet
+} vnode_flags_t;
+
 typedef enum {VNON, VREG, VDIR}vtype;
 /*
  * Represents a file or directory within a mounted file system.
@@ -90,6 +104,7 @@ typedef struct vnode
     //uint32_t flags;
     uint32_t ref_count;             /* Reference count for this vnode (used to manage lifetime) */
     vtype vnode_type;
+    uint16_t flags;
     struct vfs *vfs_mountedhere;    /* If another file system is mounted here, pointer to it */
     struct vnodeops *vnode_op;      /* Pointer to the vnode operations supported by this file/directory */
     struct vfs *vnode_vfs;          /* The VFS this vnode belongs to */

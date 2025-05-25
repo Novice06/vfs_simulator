@@ -26,24 +26,36 @@
 
 #include "device.h"
 #include "ramfs.h"
+#include "fat12.h"
 #include "disk.h"
 #include "vfs.h"
 
 int main()
 {
     vfs_init();
-    ramfs_init();
+    //ramfs_init();
+    fat12_init();
     disk_init();
 
     uint8_t buffer[19];
 
     printf("device number %d\n\n", device_num);
 
-    printf("mounting %s to /\n", device_list[0]->name);
-    if(vfs_mount("ramfs", "/", 0) != VFS_OK)
+    printf("mounting %s to /\n", device_list[1]->name);
+    if(vfs_mount("fat12", "/", 1) != VFS_OK)
         printf("error while mounting ramfs1 at /!\n");
 
-    printf("mounting %s to /mnt\n\n", device_list[1]->name);
+    int fd1 = vfs_open("/hi.txt", VFS_O_RDWR);
+    printf("opening /hi.txt\n");
+
+    printf("descriptor: %d\n", fd1);
+
+    printf("byte read: %ld\n", vfs_read(fd1, buffer, 18));
+    buffer[18] = '\0';
+
+    printf("content: %s\n", buffer);
+
+    /*printf("mounting %s to /mnt\n\n", device_list[1]->name);
     if(vfs_mount("ramfs", "/mnt", 1) != VFS_OK)
         printf("error while mounting ramfs2 at /mnt!\n");
 
@@ -63,6 +75,6 @@ int main()
     printf("content: %s\n", buffer);
 
     vfs_close(fd1);
-    vfs_close(fd2);
+    vfs_close(fd2);*/
     return 0;
 }
