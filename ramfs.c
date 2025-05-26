@@ -254,6 +254,7 @@ int ramfs_mount(vfs_t* mountpoint, int device_id)
 
     fs_info->root_vnode = malloc(sizeof(vnode_t));
     fs_info->root_vnode->ref_count = 0;
+    fs_info->root_vnode->flags = VNODE_NONE;
     fs_info->root_vnode->vnode_type = VDIR;
     fs_info->root_vnode->vfs_mountedhere = NULL;
     fs_info->root_vnode->vnode_op = &ramfs_vnode_op;
@@ -312,6 +313,7 @@ static vnode_t* create_vnode(vfs_t* mountpoint, treenode_t* node)
 
     vnode_t* newVnode = malloc(sizeof(vnode_t));
     newVnode->ref_count = 0;
+    newVnode->flags = VNODE_NONE;
     newVnode->vfs_mountedhere = NULL;
     newVnode->vnode_data = node;    // ramfs store the node here !!
     newVnode->vnode_op = &ramfs_vnode_op;

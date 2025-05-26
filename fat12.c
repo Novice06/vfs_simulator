@@ -1,3 +1,27 @@
+/*
+ * MIT License
+ *
+ * Copyright (c) 2025 Novice
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,7 +90,7 @@ typedef struct fat_dir_entry
 } __attribute__((packed)) fat_dir_entry_t;
 
 /* Important information for the file system ! */
-typedef struct ramfs_info
+typedef struct fat12_info
 {
     vnode_t* total_vnode[MAX_VNODE_PER_VFS];
     vnode_t* root_vnode;
@@ -103,39 +127,67 @@ void fat12_init()
     vfs_register_new_filesystem(&fat12_op);
 }
 
+/*
+ * Mounts a FAT12 file system on the given mount point.
+ *
+ * Mounting a FAT12 device involves reading and storing key metadata
+ * from the disk, such as the boot sector and the File Allocation Table (FAT).
+ *
+ * All relevant information is saved in the 'vfs_data' field of the mount point,
+ * allowing the file system to manage and access FAT12 structures effectively.
+ */
 int fat12_mount(vfs_t* mountpoint, int device_id)
 {
     fs_info_t* fs_info = malloc(sizeof(fs_info_t));
 
     if(fs_info == NULL)
-        return -1; // error
+        return VFS_ERROR; // error
 
     for(int i = 0; i < MAX_VNODE_PER_VFS; i++)
         fs_info->total_vnode[i] = NULL;
     
     fat_BS_t *bootSector = malloc(sizeof(fat_BS_t));
     if(bootSector == NULL)
-        return -1; // error
+    {
+        free(fs_info);
+        return VFS_ERROR; // error
+    }
     
     device_list[device_id]->read((void*)bootSector, 0, 1, device_list[device_id]->priv);
 
     void* file_allocation_table = malloc(sizeof(uint8_t) * bootSector->table_size_16 * bootSector->bytes_per_sector);
     if(file_allocation_table == NULL)
-        return -1; // error
+    {
+        free(fs_info);
+        free(bootSector);
+        return VFS_ERROR; // error
+    }
     
     device_list[device_id]->read(file_allocation_table, bootSector->reserved_sector_count, bootSector->table_size_16, device_list[device_id]->priv);
 
     void *fat_buffer = malloc(bootSector->sectors_per_cluster * bootSector->bytes_per_sector);
     if(fat_buffer == NULL)
-        return -1; // error
+    {
+        free(fs_info);
+        free(bootSector);
+        free(file_allocation_table);
+        return VFS_ERROR; // error
+    }
 
+    // registering info ...
     fs_info->bootSector = bootSector;
     fs_info->fat_buffer = fat_buffer;
     fs_info->file_allocation_table = file_allocation_table;
 
     fs_info->root_vnode = malloc(sizeof(vnode_t));
     if(fs_info->root_vnode == NULL)
-        return -1; // error
+    {
+        free(fs_info);
+        free(bootSector);
+        free(file_allocation_table);
+        free(fat_buffer);
+        return VFS_ERROR; // error
+    }
 
     fs_info->root_vnode->ref_count = 0;
     fs_info->root_vnode->flags = VNODE_ROOT;
@@ -163,6 +215,7 @@ int fat12_unmount(vfs_t* mountpoint)
     free(fs_info->bootSector);
     free(fs_info->fat_buffer);
     free(fs_info->file_allocation_table);
+    free(fs_info);
     
     return VFS_OK;
 }
@@ -206,29 +259,35 @@ int fat12_read(vnode_t* node, void *buffer, size_t size, uint32_t offset)
     if (offset >= inode->fileSize)
         return 0;
 
+    // ajust the size to read !
+    size = ((offset + size) > inode->fileSize) ? (inode->fileSize - offset) : size;
+
     uint16_t currentCluster = inode->firstClusterLow;
     uint16_t skippedClusters = (uint16_t)(offset / (fs_info->bootSector->sectors_per_cluster * fs_info->bootSector->bytes_per_sector));
     
+    /* Some clusters are skipped since, based on the offset, their content doesn't need to be read. */
     for(int i = 0; i < skippedClusters; i++)
         currentCluster = get_next_cluster(currentCluster, fs_info->file_allocation_table);
 
+    /* This is an offset based on the cluster currently being read, hence the name 'hypothetical'. */
     uint32_t hypothetical_offset = offset - (skippedClusters * fs_info->bootSector->sectors_per_cluster * fs_info->bootSector->bytes_per_sector);
-    size_t to_read = 0;
+    size_t to_read = 0; // to keep track of how many byte we've read
     while (currentCluster < 0xFF8 && to_read < size)
     {
         device_list[node->vnode_vfs->device_id]->read(fs_info->fat_buffer, cluster_to_Lba(currentCluster, fs_info->bootSector), fs_info->bootSector->sectors_per_cluster, device_list[node->vnode_vfs->device_id]->priv);
 
+        /* "Bytes to read, to ensure we don’t exceed the size of the data in the buffer. */
         uint16_t byte_to_read = (fs_info->bootSector->sectors_per_cluster * fs_info->bootSector->bytes_per_sector) - hypothetical_offset;
-        byte_to_read = ((byte_to_read + to_read) > size) ? (size - to_read) : byte_to_read;
+        byte_to_read = ((byte_to_read + to_read) > size) ? (size - to_read) : byte_to_read; // ajust the byte to read based on the actual size to read !
 
         memcpy(buffer + to_read, fs_info->fat_buffer + hypothetical_offset, byte_to_read);
 
-        to_read += byte_to_read;
-        hypothetical_offset = 0;
+        to_read += byte_to_read;    // increase the number of byte read
+        hypothetical_offset = 0;    // the hypothetical offset reset to 0 for the next cluster !
         currentCluster = get_next_cluster(currentCluster, fs_info->file_allocation_table);
     }
     
-    return to_read;
+    return to_read; // return the number of byte read !
 }
 
 int fat12_write(vnode_t* node, const void *buffer, size_t size, uint32_t offset)
@@ -245,6 +304,7 @@ static vnode_t* create_vnode(vfs_t* mountpoint, fat_dir_entry_t* inode_info)
 {
     fs_info_t* fs_info = (fs_info_t*)mountpoint->vfs_data;
 
+    /* Here we try to determine if the vnode of the target element is already present in the cache. */
     for(int i = 0; i < MAX_VNODE_PER_VFS; i++)
     {
         if(fs_info->total_vnode[i] != NULL)
@@ -256,10 +316,13 @@ static vnode_t* create_vnode(vfs_t* mountpoint, fat_dir_entry_t* inode_info)
         }
     }
 
+    /* Otherwise, we create a new vnode and ensure that we also generate a new inode,
+    since the one we received is temporary (as it came from the FAT buffer). */
     fat_dir_entry_t* file_inode = malloc(sizeof(fat_dir_entry_t));
     memcpy(file_inode, inode_info, sizeof(fat_dir_entry_t));
 
     vnode_t* newVnode = malloc(sizeof(vnode_t));
+    newVnode->flags = VNODE_NONE;
     newVnode->ref_count = 0;
     newVnode->vfs_mountedhere = NULL;
     newVnode->vnode_data = file_inode;    // we store the inode here !!
@@ -271,7 +334,7 @@ static vnode_t* create_vnode(vfs_t* mountpoint, fat_dir_entry_t* inode_info)
     else
         newVnode->vnode_type = VREG;
 
-    // otherwise we'll search a free place
+    // we'll search a free place in the cache
     for(int i = 0; i < MAX_VNODE_PER_VFS; i++)
     {   
         if(fs_info->total_vnode[i] == NULL)
@@ -293,7 +356,7 @@ static vnode_t* create_vnode(vfs_t* mountpoint, fat_dir_entry_t* inode_info)
 
     free(newVnode->vnode_data); // free the inode !
     free(newVnode);
-    return NULL;    // cannot create vnode
+    return NULL;    // cannot create vnode because too many vnodes are in used
 }
 
 void string_to_fatname(const char* name, char* nameOut)
@@ -326,8 +389,13 @@ fat_dir_entry_t* fat12_lookup_in_dir(uint32_t* dir, char* fatname, int dirEntryC
     {
         current_entry = (fat_dir_entry_t*)(dir + i);
 
+        printf("%d dir count, comparing: --%s--and--%s--\n", dirEntryCount, current_entry->filename, fatname);
+
         if(strncmp(current_entry->filename, fatname, 11) == 0)
+        {
+            printf("yeah we found it !!\n");
             return current_entry;
+        }
     }
 
     return NULL;
@@ -348,16 +416,14 @@ int fat12_lookup(vnode_t* node, const char* name, struct vnode** result)
     string_to_fatname(name, fatName);
 
     // here we need to look either on the root directory or another directory
-
-    
     if((node->flags & VNODE_ROOT) == VNODE_ROOT)
     {
-        inode = NULL;
+        inode = NULL;   // we reuse this variable just to avoid creating a new one !
         
         uint16_t root_dir_size = (fs_info->bootSector->root_entry_count * 32) / fs_info->bootSector->bytes_per_sector;
         uint16_t root_dir_offset = fs_info->bootSector->reserved_sector_count + (fs_info->bootSector->table_size_16 * fs_info->bootSector->table_count);
         
-        int dirEntryCount = fs_info->bootSector->bytes_per_sector / 32;
+        int dirEntryCount = fs_info->bootSector->bytes_per_sector / 32; // because we're reading sector by sector of the root directory length
         for(int i = 0; i < root_dir_size && inode == NULL; i++)
         {
             device_list[node->vnode_vfs->device_id]->read(fs_info->fat_buffer, root_dir_offset + i, 1, device_list[node->vnode_vfs->device_id]->priv);
@@ -369,6 +435,8 @@ int fat12_lookup(vnode_t* node, const char* name, struct vnode** result)
     {
         uint16_t currentCluster = inode->firstClusterLow;
         inode = NULL;
+
+        /* because we're reading cluster size directory length */
         int dirEntryCount = (fs_info->bootSector->sectors_per_cluster * fs_info->bootSector->bytes_per_sector) / 32;
         while (currentCluster < 0xFF8 && inode == NULL)
         {
@@ -377,6 +445,8 @@ int fat12_lookup(vnode_t* node, const char* name, struct vnode** result)
 
             currentCluster = get_next_cluster(currentCluster, fs_info->file_allocation_table);
         }
+
+        printf("here in there??0x%x\n", currentCluster);
     }
 
     if(inode != NULL)

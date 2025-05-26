@@ -37,44 +37,29 @@ int main()
     fat12_init();
     disk_init();
 
-    uint8_t buffer[19];
+    uint8_t buffer[50];
 
     printf("device number %d\n\n", device_num);
 
-    printf("mounting %s to /\n", device_list[1]->name);
-    if(vfs_mount("fat12", "/", 1) != VFS_OK)
-        printf("error while mounting ramfs1 at /!\n");
+    printf("mounting %s to /\n", device_list[0]->name);
+    if(vfs_mount("fat12", "/", 0) != VFS_OK)
+        printf("error while mounting %s at /!\n", device_list[0]->name);
 
-    int fd1 = vfs_open("/hi.txt", VFS_O_RDWR);
-    printf("opening /hi.txt\n");
+    int fd1 = vfs_open("/mydir/dir_msg.txt", VFS_O_RDWR);
+    printf("opening /mydir/dir_msg.txt\n");
 
     printf("descriptor: %d\n", fd1);
 
-    printf("byte read: %ld\n", vfs_read(fd1, buffer, 18));
-    buffer[18] = '\0';
+    size_t read = vfs_read(fd1, buffer, 49);
 
-    printf("content: %s\n", buffer);
-
-    /*printf("mounting %s to /mnt\n\n", device_list[1]->name);
-    if(vfs_mount("ramfs", "/mnt", 1) != VFS_OK)
-        printf("error while mounting ramfs2 at /mnt!\n");
-
-    int fd1 = vfs_open("/mnt/hi.txt", VFS_O_RDWR);
-    printf("opening /mnt/hi.txt\n");
-    printf("byte read: %ld\n", vfs_read(fd1, buffer, 18));
-    buffer[18] = '\0';
-
-    printf("content: %s\n", buffer);
-    
-    int fd2 = vfs_open("/doc/hello.txt", VFS_O_RDWR);
-    printf("\nopening /doc/hello.txt\n");
-    printf("byte written: %ld\n", vfs_write(fd2, buffer, 7));
-    printf("byte read: %ld\n", vfs_read(fd2, buffer, 7));
-    buffer[7] = '\0';
+    printf("byte read: %ld\n", read);
+    buffer[read] = '\0';
 
     printf("content: %s\n", buffer);
 
     vfs_close(fd1);
-    vfs_close(fd2);*/
+
+
+    
     return 0;
 }

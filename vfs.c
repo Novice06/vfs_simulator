@@ -164,7 +164,7 @@ int vfs_mount(const char *fs_name, const char *mount_point, int device_id)
 	{
 		// find the vnode's mountpoint
 		new_vfs->vnodecovered = lookup_path_name(mount_point);
-		if(new_vfs->vnodecovered == NULL)
+		if(new_vfs->vnodecovered == NULL || (new_vfs->vnodecovered->flags & VNODE_ROOT) == VNODE_ROOT)
 		{
 			free(new_vfs);
 			return VFS_ENOENT;
@@ -252,7 +252,14 @@ size_t vfs_read(fd_t fd, void *buffer, size_t size)
 	if(vfs_open_files[fd].mode != VFS_O_RDONLY && vfs_open_files[fd].mode != VFS_O_RDWR)
 		return VFS_EACCESS;
 
-	return vfs_open_files[fd].vnode->vnode_op->read(vfs_open_files[fd].vnode, buffer, size, vfs_open_files[fd].position);
+	int ret = vfs_open_files[fd].vnode->vnode_op->read(vfs_open_files[fd].vnode, buffer, size, vfs_open_files[fd].position);
+
+	if(ret < 0)	// it's an error
+		return ret;
+
+	vfs_open_files[fd].position += ret;
+
+	return ret;
 }
 
 size_t vfs_write(fd_t fd, const void *buffer, size_t size)
@@ -263,7 +270,14 @@ size_t vfs_write(fd_t fd, const void *buffer, size_t size)
 	if(vfs_open_files[fd].mode != VFS_O_WRONLY && vfs_open_files[fd].mode != VFS_O_RDWR)
 		return VFS_EACCESS;
 
-	return vfs_open_files[fd].vnode->vnode_op->write(vfs_open_files[fd].vnode, buffer, size, vfs_open_files[fd].position);
+	int ret = vfs_open_files[fd].vnode->vnode_op->write(vfs_open_files[fd].vnode, buffer, size, vfs_open_files[fd].position);
+	
+	if(ret < 0)	// it's an error
+		return ret;
+
+	vfs_open_files[fd].position += ret;
+
+	return ret;
 }
 
 void vfs_register_new_filesystem(filesystem_t* fs)
