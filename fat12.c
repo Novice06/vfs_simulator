@@ -387,15 +387,10 @@ fat_dir_entry_t* fat12_lookup_in_dir(uint32_t* dir, char* fatname, int dirEntryC
 
     for(int i = 0; i < dirEntryCount; i++)
     {
-        current_entry = (fat_dir_entry_t*)(dir + i);
-
-        printf("%d dir count, comparing: --%s--and--%s--\n", dirEntryCount, current_entry->filename, fatname);
+        current_entry = (fat_dir_entry_t*)dir + i;
 
         if(strncmp(current_entry->filename, fatname, 11) == 0)
-        {
-            printf("yeah we found it !!\n");
             return current_entry;
-        }
     }
 
     return NULL;
@@ -445,8 +440,6 @@ int fat12_lookup(vnode_t* node, const char* name, struct vnode** result)
 
             currentCluster = get_next_cluster(currentCluster, fs_info->file_allocation_table);
         }
-
-        printf("here in there??0x%x\n", currentCluster);
     }
 
     if(inode != NULL)

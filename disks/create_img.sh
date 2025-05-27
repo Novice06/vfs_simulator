@@ -1,39 +1,39 @@
 #!/bin/bash
 set -e
 
-# Fonction pour créer une image, ajouter fichiers et dossier
+# Function to create a floppy image and add files/folders to it
 create_floppy_image() {
   local imgname=$1
 
-  echo "Création de l'image $imgname"
+  echo "Creating image: $imgname"
 
-  # Créer une image floppy 1.44MB vide
+  # Create a blank 1.44MB floppy disk image
   mkfs.msdos -C "$imgname" 1440
 
-  # Fichier à la racine
-  echo "Message de test à la racine de $imgname" > root_msg.txt
+  # Create a root-level test file
+  echo "Test message at the root of $imgname" > root_msg.txt
 
-  # Copier fichier racine
+  # Copy the root-level file into the image
   mcopy -i "$imgname" root_msg.txt ::root_msg.txt
 
-  # Créer dossier dans image
+  # Create a directory inside the image
   mmd -i "$imgname" ::mydir
 
-  # Fichier dans le dossier
-  echo "Message de test dans mon_dossier de $imgname" > msg.txt
+  # Create a test file for the directory
+  echo "Test message inside 'mydir' in $imgname" > test_msg.txt
 
-  # Copier fichier dans dossier
-  mcopy -i "$imgname" msg.txt ::mydir/msg.txt
+  # Copy the file into the directory
+  mcopy -i "$imgname" test_msg.txt ::mydir/test_msg.txt
 
-  # Nettoyer fichiers temporaires
-  rm root_msg.txt msg.txt
+  # Clean up temporary files
+  rm root_msg.txt test_msg.txt
 
-  echo "Terminé pour $imgname"
+  echo "Done with $imgname"
 }
 
-# Créer les 3 images
+# Create three floppy disk images
 create_floppy_image flp0.img
 create_floppy_image flp1.img
 create_floppy_image flp2.img
 
-echo "Toutes les images ont été créées avec succès."
+echo "All floppy images created successfully!"

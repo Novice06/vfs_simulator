@@ -33,11 +33,11 @@
 int main()
 {
     vfs_init();
-    //ramfs_init();
-    fat12_init();
     disk_init();
+    //ramfs_init(); // this was an in-memory filesystem for testing purposes but no longer needed !
+    fat12_init();
 
-    uint8_t buffer[50];
+    uint8_t buffer[10];
 
     printf("device number %d\n\n", device_num);
 
@@ -45,21 +45,29 @@ int main()
     if(vfs_mount("fat12", "/", 0) != VFS_OK)
         printf("error while mounting %s at /!\n", device_list[0]->name);
 
-    int fd1 = vfs_open("/mydir/dir_msg.txt", VFS_O_RDWR);
-    printf("opening /mydir/dir_msg.txt\n");
+    printf("mounting %s to /mydir\n", device_list[1]->name);
+    if(vfs_mount("fat12", "/mydir", 1) != VFS_OK)
+        printf("error while mounting %s at /mydir!\n", device_list[1]->name);
+
+    printf("\n");
+
+    int fd1 = vfs_open("/mydir/root_msg.txt", VFS_O_RDWR);
+    printf("opening /mydir/root_msg.txt\n");
 
     printf("descriptor: %d\n", fd1);
 
-    size_t read = vfs_read(fd1, buffer, 49);
+    size_t read = 0;
 
-    printf("byte read: %ld\n", read);
-    buffer[read] = '\0';
+    printf("content:\n");
+    do
+    {
+        read = vfs_read(fd1, buffer, 9);
+        buffer[read] = '\0';
+        printf("%s", buffer);
+    }while(read != 0);
 
-    printf("content: %s\n", buffer);
-
+    printf("\n");
     vfs_close(fd1);
-
-
     
     return 0;
 }

@@ -188,20 +188,24 @@ int vfs_mount(const char *fs_name, const char *mount_point, int device_id)
 
  int vfs_unmount(const char *mount_point)
  {
-	vnode_t* vnode_covered = lookup_path_name(mount_point);
-	if(vnode_covered == NULL)
+	vnode_t* vnode = lookup_path_name(mount_point);
+	if(vnode == NULL)
 		return VFS_ENOENT;
 
-	vfs_t* mountpoint = vnode_covered->vfs_mountedhere;
+	if((vnode->flags & VNODE_ROOT) != VNODE_ROOT)
+		return VFS_ERROR; // it's not the root of a filesystem, it's not a mount point...
 
-	if(mountpoint == NULL)
-		return VFS_ERROR;	// it's not a mount point...
+	vfs_t* mountpoint = vnode->vnode_vfs;
 
 	if (mountpoint == vfs_root)
          return VFS_EACCESS;  // cannot unmount the root fs
 
 	// TODO: implemente a mechanism to prevent umounting a filesystem
 	// as long as there are other filesystems mounted on top of it
+
+	// this vnode is no longer a mountpoint
+	mountpoint->vnodecovered->vfs_mountedhere = NULL;
+	mountpoint->vnodecovered->ref_count--;
 
 	mountpoint->vfs_op->vfs_unmount(mountpoint);
 	remove_mount_point(mountpoint);
